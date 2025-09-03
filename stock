@@ -1,0 +1,19 @@
+{
+  "stock": [
+    {
+      "item": "T-Shirt",
+      "description": "Classic crew neck",
+      "color": "Black",
+      "size": "S",
+      "stock": 50
+    },
+    {
+      "item": "Hoodie",
+      "description": "Pullover with front pocket",
+      "color": "Grey",
+      "size": "L",
+      "stock": 25
+    }
+  ],
+  "history": []
+}
