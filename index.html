@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multibangun Merchandise Stock Update</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .tab-active { border-bottom-color: #4f46e5; color: #1f2937; }
+        .tab-inactive { border-bottom-color: transparent; color: #6b7280; }
+        .btn { transition: background-color 0.2s; font-weight: 600; padding: 4px 8px; border-radius: 0.375rem; font-size: 0.75rem; line-height: 1rem; cursor: pointer; }
+        .btn:disabled { background-color: #9ca3af; cursor: not-allowed; }
+        .btn-primary { background-color: #4f46e5; color: white; }
+        .btn-primary:hover:not(:disabled) { background-color: #4338ca; }
+        .btn-danger { background-color: #ef4444; color: white; }
+        .btn-danger:hover:not(:disabled) { background-color: #dc2626; }
+        .btn-success { background-color: #22c55e; color: white; }
+        .btn-success:hover:not(:disabled) { background-color: #16a34a; }
+        .btn-secondary { background-color: #6b7280; color: white; }
+        .btn-secondary:hover:not(:disabled) { background-color: #4b5563; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .log-entry { animation: fadeIn 0.5s ease-out forwards; }
+        .table-cell { padding: 8px 16px; vertical-align: middle; }
+        .table-input { width: 100%; background-color: transparent; border: 1px solid transparent; padding: 4px 2px; border-radius: 4px; transition: border-color 0.2s, background-color 0.2s; }
+        .table-input:not(:disabled):focus { outline: none; border-color: #4f46e5; background-color: #f9fafb; }
+        .table-input:disabled { color: #374151; cursor: default; }
+        .history-badge { padding: 2px 8px; border-radius: 9999px; font-size: 0.75rem; font-weight: 500; }
+        .badge-add { background-color: #dbeafe; color: #1e40af; }
+        .badge-edit { background-color: #fef3c7; color: #92400e; }
+        .badge-delete { background-color: #fee2e2; color: #991b1b; }
+        .badge-out { background-color: #fce7f3; color: #9d174d; }
+        .loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(255, 255, 255, 0.8); z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; backdrop-filter: blur(4px); gap: 1rem; }
+        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #4f46e5; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+
+    <div id="loading-overlay" class="loading-overlay hidden">
+        <div class="loader"></div>
+        <p id="loading-message" class="text-gray-700 font-medium">Loading...</p>
+    </div>
+
+    <div class="container mx-auto p-4 md:p-8 max-w-7xl">
+        <header class="mb-8">
+            <h1 class="text-3xl font-bold text-gray-900">Multibangun Merchandise Stock Update</h1>
+            <p class="text-gray-600 mt-2">View and edit your current inventory, add new items, and track all changes in the history log.</p>
+        </header>
+
+        <main class="bg-white rounded-lg border border-gray-200 shadow-sm">
+             <div class="p-4 bg-blue-50 border-b border-blue-200 text-sm text-blue-800">
+                <strong>Status:</strong> <span id="status-message">Initializing...</span>
+            </div>
+            <!-- Tabs -->
+            <div class="border-b border-gray-200">
+                <nav class="-mb-px flex gap-6 px-6" aria-label="Tabs">
+                    <button id="tab-stock-view" class="tab-active shrink-0 border-b-2 px-1 py-4 text-sm font-medium">Current Stock</button>
+                    <button id="tab-add-item" class="tab-inactive shrink-0 border-b-2 px-1 py-4 text-sm font-medium">Add Item</button>
+                    <button id="tab-checkout-item" class="tab-inactive shrink-0 border-b-2 px-1 py-4 text-sm font-medium">Checkout Item</button>
+                    <button id="tab-history" class="tab-inactive shrink-0 border-b-2 px-1 py-4 text-sm font-medium">History</button>
+                    <button id="tab-code" class="tab-inactive shrink-0 border-b-2 px-1 py-4 text-sm font-medium">Stock File (JSON)</button>
+                </nav>
+            </div>
+
+            <!-- Content Panes -->
+            <div id="pane-stock-view" class="p-6">
+                <div class="mb-4 p-3 bg-yellow-50 text-yellow-800 border border-yellow-200 rounded-md text-sm">
+                    ⚠️ <strong>Important:</strong> To edit an item, click 'Edit' on its row, make your changes, then click 'Save'.
+                </div>
+                <div class="border border-gray-200 rounded-md overflow-hidden">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="table-cell text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Item</th>
+                                <th class="table-cell text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                                <th class="table-cell text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Color</th>
+                                <th class="table-cell text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Size</th>
+                                <th class="table-cell text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stock (Qty)</th>
+                                <th class="table-cell text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="stock-table-body" class="bg-white divide-y divide-gray-200"></tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <div id="pane-add-item" class="p-6 hidden">
+                 <div class="border border-gray-200 rounded-lg p-6 bg-gray-50">
+                    <h3 class="text-lg font-semibold mb-4">📦 Add New Item to Stock</h3>
+                    <form id="stock-form">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                             <div>
+                                <label for="date_added" class="block text-sm font-medium text-gray-700">Date Added</label>
+                                <input type="date" name="date_added" id="date_added" class="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" required>
+                            </div>
+                            <div>
+                                <label for="item_type" class="block text-sm font-medium text-gray-700">Item Type</label>
+                                <select id="item_type" name="item_type" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"></select>
+                                <input type="text" id="new-item_type" name="new-item_type" class="mt-2 hidden focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" placeholder="Enter new item type">
+                            </div>
+                             <div>
+                                <label for="size" class="block text-sm font-medium text-gray-700">Size</label>
+                                <select id="size" name="size" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"></select>
+                                <input type="text" id="new-size" name="new-size" class="mt-2 hidden focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" placeholder="Enter new size">
+                            </div>
+                            <div>
+                                <label for="color" class="block text-sm font-medium text-gray-700">Color</label>
+                                <select id="color" name="color" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"></select>
+                                <input type="text" id="new-color" name="new-color" class="mt-2 hidden focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" placeholder="Enter new color">
+                            </div>
+                            <div class="md:col-span-2">
+                                <label for="description" class="block text-sm font-medium text-gray-700">Description</label>
+                                <select id="description" name="description" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"></select>
+                                <input type="text" id="new-description" name="new-description" class="mt-2 hidden focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" placeholder="Enter new description">
+                            </div>
+                            <div>
+                                <label for="quantity" class="block text-sm font-medium text-gray-700">Quantity (Qty)</label>
+                                <input type="number" name="quantity" id="quantity" min="1" class="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" placeholder="e.g. 50" required>
+                            </div>
+                        </div>
+                        <div class="mt-6">
+                            <button type="submit" class="w-full btn btn-primary py-2 px-4">Add Item to Stock</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <div id="pane-checkout-item" class="p-6 hidden">
+                 <div class="border border-gray-200 rounded-lg p-6 bg-gray-50">
+                    <h3 class="text-lg font-semibold mb-4">🛒 Checkout Item from Stock</h3>
+                    <form id="checkout-form">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                             <div>
+                                <label for="checkout_date" class="block text-sm font-medium text-gray-700">Checkout Date</label>
+                                <input type="date" name="checkout_date" id="checkout_date" class="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" required>
+                            </div>
+                            <div>
+                                <label for="checkout_item_type" class="block text-sm font-medium text-gray-700">Item Type</label>
+                                <select id="checkout_item_type" name="checkout_item_type" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"></select>
+                            </div>
+                             <div>
+                                <label for="checkout_size" class="block text-sm font-medium text-gray-700">Size</label>
+                                <select id="checkout_size" name="checkout_size" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"></select>
+                            </div>
+                            <div>
+                                <label for="checkout_color" class="block text-sm font-medium text-gray-700">Color</label>
+                                <select id="checkout_color" name="checkout_color" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"></select>
+                            </div>
+                            <div class="md:col-span-2">
+                                <label for="checkout_description" class="block text-sm font-medium text-gray-700">Description</label>
+                                <select id="checkout_description" name="checkout_description" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"></select>
+                            </div>
+                             <div>
+                                <label for="checkout_quantity" class="block text-sm font-medium text-gray-700">Quantity to Checkout</label>
+                                <input type="number" name="checkout_quantity" id="checkout_quantity" min="1" class="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" placeholder="e.g. 5" required>
+                            </div>
+                             <div>
+                                <label for="checkout_reason" class="block text-sm font-medium text-gray-700">Reason</label>
+                                <input type="text" name="checkout_reason" id="checkout_reason" class="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" placeholder="e.g. Sold, Damaged" required>
+                            </div>
+                             <div class="md:col-span-2">
+                                <label for="checkout_by" class="block text-sm font-medium text-gray-700">Taken By</label>
+                                <input type="text" name="checkout_by" id="checkout_by" class="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" placeholder="e.g. John Doe" required>
+                            </div>
+                        </div>
+                        <div class="mt-6">
+                            <button type="submit" class="w-full btn btn-danger py-2 px-4">Checkout Item</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <div id="pane-history" class="p-6 hidden">
+                <div class="border border-gray-200 rounded-md overflow-hidden">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="table-cell text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                                <th class="table-cell text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
+                                <th class="table-cell text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Details</th>
+                            </tr>
+                        </thead>
+                        <tbody id="history-table-body" class="bg-white divide-y divide-gray-200"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="pane-code" class="p-6 hidden">
+                <div class="border border-gray-200 rounded-md">
+                    <div class="bg-gray-50 px-4 py-2 border-b border-gray-200 text-sm font-medium">stock.json</div>
+                    <pre class="p-4 text-sm whitespace-pre-wrap break-all"><code id="stock-json-content"></code></pre>
+                </div>
+            </div>
+        </main>
+        
+        <section id="automation-log-section" class="mt-8 hidden">
+            <h2 class="text-xl font-bold text-gray-900 mb-4">Automation Log</h2>
+            <div id="log-output" class="bg-gray-900 text-white font-mono text-sm rounded-lg p-6 space-y-2 overflow-y-auto h-64"></div>
+        </section>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        // --- GitHub Configuration ---
+        const GITHUB_USERNAME = "YOUR_GITHUB_USERNAME"; // <-- IMPORTANT: Change this
+        const GITHUB_REPO = "YOUR_REPO_NAME";       // <-- IMPORTANT: Change this
+        const GITHUB_TOKEN = "YOUR_PERSONAL_ACCESS_TOKEN"; // <-- IMPORTANT: Change this
+
+        const API_URL = `https://api.github.com/repos/${GITHUB_USERNAME}/${GITHUB_REPO}`;
+
+        // --- GLOBAL STATE ---
+        let currentStockData = [];
+        let historyLog = [];
+        let isSaving = false;
+
+        // --- DOM ELEMENTS ---
+        const loadingOverlay = document.getElementById('loading-overlay');
+        const loadingMessage = document.getElementById('loading-message');
+        const statusMessage = document.getElementById('status-message');
+        const stockJsonContent = document.getElementById('stock-json-content');
+        const stockTableBody = document.getElementById('stock-table-body');
+        const historyTableBody = document.getElementById('history-table-body');
+        const stockForm = document.getElementById('stock-form');
+        const checkoutForm = document.getElementById('checkout-form');
+        const dateAddedInput = document.getElementById('date_added');
+        const checkoutDateInput = document.getElementById('checkout_date');
+        const itemTypeSelect = document.getElementById('item_type');
+        const newItemTypeInput = document.getElementById('new-item_type');
+        const sizeSelect = document.getElementById('size');
+        const newSizeInput = document.getElementById('new-size');
+        const colorSelect = document.getElementById('color');
+        const newColorInput = document.getElementById('new-color');
+        const descriptionSelect = document.getElementById('description');
+        const newDescriptionInput = document.getElementById('new-description');
+        const checkoutItemTypeSelect = document.getElementById('checkout_item_type');
+        const checkoutSizeSelect = document.getElementById('checkout_size');
+        const checkoutColorSelect = document.getElementById('checkout_color');
+        const checkoutDescriptionSelect = document.getElementById('checkout_description');
+        const tabs = { stockView: document.getElementById('tab-stock-view'), addItem: document.getElementById('tab-add-item'), checkoutItem: document.getElementById('tab-checkout-item'), history: document.getElementById('tab-history'), code: document.getElementById('tab-code') };
+        const panes = { stockView: document.getElementById('pane-stock-view'), addItem: document.getElementById('pane-add-item'), checkoutItem: document.getElementById('pane-checkout-item'), history: document.getElementById('pane-history'), code: document.getElementById('pane-code') };
+
+        // --- CORE FUNCTIONS ---
+        const getTodayDateString = () => new Date().toISOString().split('T')[0];
+        
+        async function fetchStockData() {
+            if (isSaving) return;
+            setLoading(true, "Fetching latest stock data...");
+            try {
+                const response = await fetch(`${API_URL}/contents/stock.json?t=${new Date().getTime()}`, {
+                    headers: { 'Accept': 'application/vnd.github.v3.raw' }
+                });
+                if (!response.ok) {
+                    if (response.status === 404) {
+                        currentStockData = [];
+                        historyLog = [];
+                        setStatus("No stock file found. Add an item to create it.", true);
+                    } else {
+                        throw new Error(`GitHub API Error: ${response.status} ${response.statusText}`);
+                    }
+                } else {
+                    const data = await response.json();
+                    currentStockData = data.stock || [];
+                    historyLog = data.history || [];
+                }
+                refreshUI();
+            } catch (error) {
+                console.error("Failed to fetch stock data:", error);
+                setStatus("Error loading data. Check console for details.", true);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        async function triggerWorkflow(actionType, payload) {
+            setLoading(true, `Saving: ${actionType.replace('_', ' ').toLowerCase()}`);
+            isSaving = true;
+            try {
+                const response = await fetch(`${API_URL}/dispatches`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `token ${GITHUB_TOKEN}`, 'Accept': 'application/vnd.github.v3+json', },
+                    body: JSON.stringify({ event_type: 'update_stock', client_payload: { action: actionType, data: payload } })
+                });
+
+                if (!response.ok) throw new Error(`Failed to trigger workflow: ${response.statusText}`);
+                
+                setStatus("Save request sent. Waiting for GitHub to process...");
+                
+                setTimeout(() => {
+                    isSaving = false;
+                    fetchStockData();
+                }, 8000); // Wait 8s for action to complete and cache to clear.
+            } catch (error) {
+                console.error("Workflow trigger failed:", error);
+                setStatus("Error saving data. Check console for details.", true);
+                setLoading(false);
+                isSaving = false;
+            }
+        }
+
+        function setLoading(isLoading, message = "Loading...") {
+            loadingMessage.textContent = message;
+            loadingOverlay.classList.toggle('hidden', !isLoading);
+            document.querySelectorAll('button, input, select').forEach(el => el.disabled = isLoading);
+        }
+
+        function setStatus(message, isError = false) {
+            statusMessage.textContent = message;
+            statusMessage.parentElement.className = `p-4 border-b text-sm ${isError ? 'bg-red-50 border-red-200 text-red-800' : 'bg-blue-50 border-blue-200 text-blue-800'}`;
+        }
+        
+        function refreshUI() {
+            sortStockData();
+            renderStockJSON();
+            renderStockTable();
+            renderHistoryLog();
+            populateDropdowns();
+            setStatus("Ready.");
+        }
+
+        function sortStockData() {
+            const sizeOrder = { 'XXS': 0, 'XS': 1, 'S': 2, 'M': 3, 'L': 4, 'XL': 5, 'XXL': 6 };
+            currentStockData.sort((a, b) => {
+                const itemA = a.item.toLowerCase(), itemB = b.item.toLowerCase();
+                if (itemA < itemB) return -1; if (itemA > itemB) return 1;
+                const colorA = a.color.toLowerCase(), colorB = b.color.toLowerCase();
+                if (colorA < colorB) return -1; if (colorA > colorB) return 1;
+                const sizeA = sizeOrder[a.size.toUpperCase()] ?? 99, sizeB = sizeOrder[b.size.toUpperCase()] ?? 99;
+                return sizeA - sizeB;
+            });
+        }
+
+        function renderStockJSON() { stockJsonContent.textContent = JSON.stringify({ stock: currentStockData, history: historyLog }, null, 2); }
+
+        function renderStockTable() {
+            stockTableBody.innerHTML = '';
+            currentStockData.forEach((item, index) => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td class="table-cell">${item.item}</td><td class="table-cell">${item.description}</td>
+                    <td class="table-cell">${item.color}</td><td class="table-cell">${item.size}</td>
+                    <td class="table-cell font-medium">${item.stock}</td>
+                    <td class="table-cell text-sm">
+                        <div class="view-mode-actions flex items-center gap-2">
+                            <button data-index="${index}" class="edit-btn btn btn-primary">Edit</button>
+                        </div>
+                        <div class="edit-mode-actions hidden flex items-center gap-2">
+                            <button data-index="${index}" class="save-btn btn btn-success">Save</button>
+                            <button data-index="${index}" class="cancel-btn btn btn-secondary">Cancel</button>
+                            <button data-index="${index}" class="delete-btn btn btn-danger">Delete</button>
+                        </div>
+                    </td>`;
+                stockTableBody.appendChild(row);
+            });
+        }
+
+        function renderHistoryLog() {
+            historyTableBody.innerHTML = '';
+            (historyLog || []).forEach(log => {
+                const row = document.createElement('tr');
+                let badgeClass = '';
+                if (log.action === 'ADD_ITEM') badgeClass = 'badge-add';
+                else if (log.action === 'EDIT_ITEM') badgeClass = 'badge-edit';
+                else if (log.action === 'DELETE_ITEM') badgeClass = 'badge-delete';
+                else if (log.action === 'CHECKOUT_ITEM') badgeClass = 'badge-out';
+                
+                let details = JSON.stringify(log.data);
+                if (log.action === 'ADD_ITEM') details = `Added ${log.data.stock} of ${log.data.item} (${log.data.color}, ${log.data.size})`;
+                if (log.action === 'CHECKOUT_ITEM') details = `Checked out ${log.data.quantity} of ${log.data.item.item} for ${log.data.reason} by <b>${log.data.takenBy}</b>`;
+                if (log.action === 'DELETE_ITEM') details = `Deleted ${log.data.item.item} (${log.data.item.color}, ${log.data.item.size})`;
+                if (log.action === 'EDIT_ITEM') details = `Edited ${log.data.newValues.item}`;
+
+                row.innerHTML = `
+                    <td class="table-cell text-sm text-gray-500">${new Date(log.timestamp).toLocaleString()}</td>
+                    <td class="table-cell"><span class="history-badge ${badgeClass}">${log.action.replace('_', ' ')}</span></td>
+                    <td class="table-cell text-sm text-gray-800">${details}</td>`;
+                historyTableBody.appendChild(row);
+            });
+        }
+
+        function populateDropdowns() {
+            const allItems = [...new Set(currentStockData.map(item => item.item))];
+            const allSizes = [...new Set(currentStockData.map(item => item.size))];
+            const allColors = [...new Set(currentStockData.map(item => item.color))];
+            const allDescriptions = [...new Set(currentStockData.map(item => item.description))];
+
+            const setupAddDropdown = (selectEl, options) => {
+                const currentValue = selectEl.value;
+                selectEl.innerHTML = `<option value="">-- Select --</option>`;
+                options.forEach(option => selectEl.innerHTML += `<option value="${option}">${option}</option>`);
+                selectEl.innerHTML += '<option value="__add_new__">-- Add New --</option>';
+                if (options.includes(currentValue)) selectEl.value = currentValue;
+            };
+
+            setupAddDropdown(itemTypeSelect, allItems);
+            setupAddDropdown(sizeSelect, allSizes);
+            setupAddDropdown(colorSelect, allColors);
+            setupAddDropdown(descriptionSelect, allDescriptions);
+            updateCheckoutFilters();
+        }
+
+        function updateCheckoutFilters() {
+            let filteredStock = [...currentStockData];
+            const selectedItem = checkoutItemTypeSelect.value;
+            if (selectedItem) filteredStock = filteredStock.filter(item => item.item === selectedItem);
+            const availableItems = [...new Set(currentStockData.map(i => i.item))];
+            populateCheckoutDropdown(checkoutItemTypeSelect, availableItems, selectedItem);
+
+            const selectedColor = checkoutColorSelect.value;
+            if (selectedColor) filteredStock = filteredStock.filter(item => item.color === selectedColor);
+            const availableColors = [...new Set(filteredStock.map(i => i.color))];
+            populateCheckoutDropdown(checkoutColorSelect, availableColors, selectedColor);
+            
+            const selectedSize = checkoutSizeSelect.value;
+            if (selectedSize) filteredStock = filteredStock.filter(item => item.size === selectedSize);
+            const availableSizes = [...new Set(filteredStock.map(i => i.size))];
+            populateCheckoutDropdown(checkoutSizeSelect, availableSizes, selectedSize);
+
+            const availableDescriptions = [...new Set(filteredStock.map(i => i.description))];
+            populateCheckoutDropdown(checkoutDescriptionSelect, availableDescriptions, checkoutDescriptionSelect.value);
+        }
+
+        function populateCheckoutDropdown(selectEl, options, selectedValue) {
+            const originalValue = selectedValue || selectEl.value;
+            selectEl.innerHTML = `<option value="">-- All --</option>`;
+            options.forEach(option => selectEl.innerHTML += `<option value="${option}">${option}</option>`);
+            if (options.includes(originalValue)) selectEl.value = originalValue;
+        }
+
+        function gatherAndValidateAddForm() {
+            const getDropdownValue = (selectEl, inputEl) => selectEl.value === '__add_new__' ? inputEl.value.trim() : selectEl.value;
+            const itemData = {};
+            const fields = [ { key: 'item', select: itemTypeSelect, input: newItemTypeInput, name: "Item Type" }, { key: 'size', select: sizeSelect, input: newSizeInput, name: "Size" }, { key: 'color', select: colorSelect, input: newColorInput, name: "Color" }, { key: 'description', select: descriptionSelect, input: newDescriptionInput, name: "Description" }, ];
+            for (const field of fields) {
+                const value = getDropdownValue(field.select, field.input);
+                if (!value) { setStatus(`Add item failed: Please select or enter a value for '${field.name}'.`, true); return null; }
+                itemData[field.key] = value;
+            }
+            const quantity = parseInt(document.getElementById('quantity').value, 10);
+            if (!quantity || quantity < 1) { setStatus('Add item failed: Please enter a valid quantity (1 or greater).', true); return null; }
+            itemData.stock = quantity;
+            return itemData;
+        }
+
+        // --- EVENT HANDLERS ---
+        Object.keys(tabs).forEach(key => tabs[key].addEventListener('click', () => switchTab(key)));
+        function switchTab(activeTabKey) { Object.keys(tabs).forEach(key => { const isActive = key === activeTabKey; tabs[key].classList.toggle('tab-active', isActive); tabs[key].classList.toggle('tab-inactive', !isActive); panes[key].classList.toggle('hidden', !isActive); }); }
+
+        stockForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const itemData = gatherAndValidateAddForm();
+            if (itemData) {
+                await triggerWorkflow('ADD_ITEM', itemData);
+                stockForm.reset();
+                dateAddedInput.value = getTodayDateString();
+                document.querySelectorAll('#stock-form input[type="text"]').forEach(el => el.classList.add('hidden'));
+            }
+        });
+        
+        checkoutForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const item = checkoutItemTypeSelect.value, color = checkoutColorSelect.value, size = checkoutSizeSelect.value, description = checkoutDescriptionSelect.value;
+            const quantity = parseInt(document.getElementById('checkout_quantity').value, 10);
+            const reason = document.getElementById('checkout_reason').value.trim();
+            const takenBy = document.getElementById('checkout_by').value.trim();
+
+            if (!item || !color || !size || !description || !quantity || quantity < 1 || !reason || !takenBy) {
+                return setStatus('Checkout failed: Please fill out all fields.', true);
+            }
+            const itemIndex = currentStockData.findIndex(i => i.item === item && i.color === color && i.size === size && i.description === description);
+            if (itemIndex === -1) return setStatus('Checkout failed: Item not found.', true);
+            if (quantity > currentStockData[itemIndex].stock) return setStatus(`Checkout failed: Not enough stock. Available: ${currentStockData[itemIndex].stock}`, true);
+            
+            await triggerWorkflow('CHECKOUT_ITEM', { index: itemIndex, quantity, reason, takenBy, item: currentStockData[itemIndex] });
+            checkoutForm.reset();
+            checkoutDateInput.value = getTodayDateString();
+        });
+
+        [itemTypeSelect, sizeSelect, colorSelect, descriptionSelect].forEach(el => {
+            el.addEventListener('change', e => document.getElementById(`new-${e.target.id}`).classList.toggle('hidden', e.target.value !== '__add_new__'));
+        });
+        [checkoutItemTypeSelect, checkoutColorSelect, checkoutSizeSelect].forEach(el => el.addEventListener('change', updateCheckoutFilters));
+
+        stockTableBody.addEventListener('click', async (e) => {
+            const button = e.target.closest('button');
+            if (!button) return;
+            const itemIndex = parseInt(button.dataset.index, 10);
+            const row = button.closest('tr');
+
+            if (button.classList.contains('edit-btn')) {
+                row.children[0].innerHTML = `<input type="text" class="table-input" value="${currentStockData[itemIndex].item}">`;
+                row.children[1].innerHTML = `<input type="text" class="table-input" value="${currentStockData[itemIndex].description}">`;
+                row.children[2].innerHTML = `<input type="text" class="table-input" value="${currentStockData[itemIndex].color}">`;
+                row.children[3].innerHTML = `<input type="text" class="table-input" value="${currentStockData[itemIndex].size}">`;
+                row.children[4].innerHTML = `<input type="number" class="table-input" value="${currentStockData[itemIndex].stock}">`;
+                row.querySelector('.view-mode-actions').classList.add('hidden');
+                row.querySelector('.edit-mode-actions').classList.remove('hidden');
+            } else if (button.classList.contains('cancel-btn')) {
+                refreshUI();
+            } else if (button.classList.contains('delete-btn')) {
+                const itemToDelete = currentStockData[itemIndex];
+                await triggerWorkflow('DELETE_ITEM', { index: itemIndex, item: itemToDelete });
+            } else if (button.classList.contains('save-btn')) {
+                const inputs = Array.from(row.querySelectorAll('input'));
+                const newValues = {
+                    item: inputs[0].value, description: inputs[1].value, color: inputs[2].value,
+                    size: inputs[3].value, stock: parseInt(inputs[4].value, 10) || 0
+                };
+                await triggerWorkflow('EDIT_ITEM', { index: itemIndex, newValues });
+            }
+        });
+
+        // --- INITIALIZATION ---
+        dateAddedInput.value = getTodayDateString();
+        checkoutDateInput.value = getTodayDateString();
+        fetchStockData();
+    });
+    </script>
+</body>
+</html>
+
